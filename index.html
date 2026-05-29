@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FYAI</title>
+    <link rel="stylesheet" href="/styles.css?v=20260522-usage-units">
+  </head>
+  <body data-view="studio">
+    <!-- 新增登录授权：未登录时只显示登录和申请入口，避免未授权成员直接使用生成额度。 -->
+    <section id="authGate" class="auth-gate" hidden>
+      <div class="auth-card">
+        <div class="auth-brand">
+          <span>FY</span>
+          <strong>FYAI</strong>
+        </div>
+        <div class="auth-grid">
+          <form id="loginForm" class="auth-box">
+            <h1>登录</h1>
+            <input name="username" autocomplete="username" placeholder="账号" required>
+            <input name="password" type="password" autocomplete="current-password" placeholder="密码" required>
+            <button type="submit">进入</button>
+          </form>
+          <form id="applyForm" class="auth-box muted-box">
+            <h2>申请使用</h2>
+            <input name="name" autocomplete="name" placeholder="姓名" required>
+            <input name="username" autocomplete="username" placeholder="自定义账号" required>
+            <input name="password" type="password" autocomplete="new-password" placeholder="设置密码，至少 6 位" required>
+            <input name="contact" placeholder="备注，可填部门或手机号">
+            <button class="secondary" type="submit">提交申请</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <main class="shell" hidden>
+      <header class="topbar">
+        <div class="brand-mark">
+          <span>FY</span>
+          <strong>FYAI</strong>
+          <small id="keyStatus">读取中</small>
+          <small id="sessionUser">未登录</small>
+        </div>
+        <!-- 预览稿对齐：导航放在顶部中间，减少页面上下割裂。 -->
+        <nav class="view-tabs" aria-label="页面分区">
+          <a class="active" href="#studio">视频生成</a>
+          <a href="#jobs">任务流水</a>
+          <a href="#usage">用量统计</a>
+          <a href="#library">提示词库</a>
+        </nav>
+        <div class="top-actions">
+          <button id="syncBalanceBtn" class="secondary" type="button">同步</button>
+          <button id="refreshActiveBtn" class="secondary" type="button">刷新任务</button>
+          <button id="configureKeyBtn" class="secondary" type="button">密钥</button>
+          <button id="reloadBtn" type="button">刷新</button>
+          <button id="logoutBtn" class="secondary" type="button">退出</button>
+        </div>
+      </header>
+
+      <!-- 新增登录授权：管理员批准入口放在内容顶部，有待处理申请时第一眼能看到。 -->
+      <section id="accessAdminPanel" class="panel access-panel" hidden>
+        <div class="panel-head">
+          <div>
+            <h2>访问申请</h2>
+            <span>批准后，对方用自己账号密码登录。</span>
+          </div>
+          <button id="refreshAccessBtn" class="secondary" type="button">刷新申请</button>
+        </div>
+        <div id="accessRequestList" class="access-list"></div>
+      </section>
+
+      <section id="studio" class="panel generator-panel">
+        <div class="generator-head">
+          <h2>新建任务</h2>
+          <span id="matrixCount" class="count-pill">0 条</span>
+        </div>
+
+        <form id="batchForm" class="generator-form">
+          <!-- 可见即所得改版：提示词独占第一屏核心位置，默认高度收敛，解决左侧大面积空白。 -->
+          <label class="prompt-field prompt-card">
+            视频提示词
+            <textarea name="prompt" rows="7" placeholder="画面、人物、动作、场景、口播、风格。" required></textarea>
+            <div id="mentionMenu" class="mention-menu" hidden></div>
+          </label>
+
+          <!-- 预览稿对齐：参考图属于提示词素材，移动到提示词下方、参数上方。 -->
+          <div class="reference-strip">
+            <input id="referenceImageInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+            <input name="imageUrl" type="hidden">
+            <div>
+              <strong>参考图</strong>
+              <span id="uploadStatus">上传后会在提示词里插入 @图片1</span>
+            </div>
+            <div class="upload-actions">
+              <label id="chooseImageBtn" class="button-like secondary" for="referenceImageInput">上传</label>
+              <button id="clearImageBtn" class="secondary" type="button" disabled>移除</button>
+            </div>
+            <div id="referencePreviewList" class="reference-preview-list"></div>
+          </div>
+
+          <!-- 可见即所得改版：高频参数统一 4 列排列，减少上下滚动和寻找成本。 -->
+          <section class="parameter-card">
+            <div class="control-grid primary-controls">
+              <label>
+                使用人
+                <select name="owner" required>
+                  <!-- 体验优化：使用人选项由已授权账号自动填充，避免名单重复维护。 -->
+                  <option value="">选择使用人</option>
+                </select>
+              </label>
+              <label>
+                模型
+                <select name="model">
+                  <option value="sora-2-official">Sora 2 Official</option>
+                  <option value="ark-seedance-2-pro">Seedance 2.0 Pro 官方</option>
+                  <option value="ark-seedance-2-fast">Seedance 2.0 Fast 官方</option>
+                </select>
+              </label>
+              <label>
+                秒数
+                <select name="duration">
+                  <option>4</option>
+                  <option selected>8</option>
+                  <option>12</option>
+                  <option>16</option>
+                  <option>20</option>
+                  <option>10</option>
+                  <option>15</option>
+                </select>
+              </label>
+              <label>
+                比例
+                <select name="aspectRatio">
+                  <option value="16:9">16:9 横屏</option>
+                  <option value="9:16">9:16 竖屏</option>
+                  <option value="auto">自动</option>
+                </select>
+              </label>
+              <label>
+                分辨率
+                <select name="resolution">
+                  <option value="720p">720p</option>
+                </select>
+              </label>
+              <label>
+                条数
+                <input name="variantsPerCombination" type="number" min="1" max="50" value="1">
+              </label>
+              <label>
+                分类
+                <select name="category">
+                  <option value="">未分类</option>
+                  <option value="警察">警察</option>
+                  <option value="空军">空军</option>
+                  <option value="世界杯">世界杯</option>
+                  <option value="豪车">豪车</option>
+                  <option value="街访">街访</option>
+                  <option value="名人克隆">名人克隆</option>
+                  <option value="三个女的">三个女的</option>
+                </select>
+              </label>
+              <label>
+                批次名
+                <input name="name" placeholder="可空，例：5 月素材测试">
+              </label>
+            </div>
+          </section>
+
+          <!-- 预览稿对齐：提交区改为普通横条，不固定、不遮挡页面。 -->
+          <section class="action-dock">
+            <div id="costPreview" class="summary"></div>
+            <div class="button-row action-row">
+              <button id="savePromptBtn" class="secondary" type="button">保存提示词</button>
+              <button type="submit">草稿</button>
+              <button class="strong" name="submitNow" value="1" type="submit">提交任务</button>
+            </div>
+          </section>
+        </form>
+      </section>
+
+      <section class="metrics" id="metrics"></section>
+
+      <!-- Apple 风改版：统计保留必要口径说明，PoYo 和火山用不同单位展示，避免计费口径混淆。 -->
+      <section id="usage" class="panel usage-panel">
+        <div class="panel-head usage-head">
+          <div>
+            <h2>用量统计</h2>
+            <span>PoYo 显示积分，火山显示 tokens。</span>
+          </div>
+        </div>
+        <div class="usage-toolbar">
+          <div class="usage-toolbar-main">
+            <div class="usage-range-tabs" aria-label="统计范围">
+              <button class="active" type="button" data-usage-range="all">全部日期</button>
+              <button type="button" data-usage-range="week">本周</button>
+              <button type="button" data-usage-range="month">本月</button>
+              <button type="button" data-usage-range="date">指定日期</button>
+              <select id="usageRangeFilter" hidden>
+                <option value="all">全部日期</option>
+                <option value="week">本周</option>
+                <option value="month">本月</option>
+                <option value="date">指定日期</option>
+              </select>
+            </div>
+            <div class="usage-filters">
+              <label>
+                使用人
+                <select id="usageOwnerFilter">
+                  <option value="">全部使用人</option>
+                </select>
+              </label>
+              <label>
+                日期
+                <select id="usageDateFilter"></select>
+              </label>
+            </div>
+          </div>
+          <button id="exportUsageCsvBtn" type="button">导出统计</button>
+        </div>
+        <div id="usageSummary" class="usage-summary"></div>
+        <div id="usageChart" class="usage-chart" aria-label="用量消耗柱状图"></div>
+        <!-- 运营视角优化：补充分类和地区汇总，帮助快速判断素材方向和消耗分布。 -->
+        <div id="usageBreakdowns" class="usage-breakdowns"></div>
+        <div class="table-wrap usage-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>用户名</th>
+                <th>范围生成条数</th>
+                <th>范围消耗用量</th>
+                <th>总用量</th>
+              </tr>
+            </thead>
+            <tbody id="usageTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="utilityGrid" class="utility-grid key-ready">
+        <div class="panel pricing-box">
+          <div class="panel-head">
+            <h2>用量规则</h2>
+          </div>
+          <div id="pricingList" class="pricing-list"></div>
+        </div>
+      </section>
+
+      <section id="jobs" class="layout">
+        <section class="workbench">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>任务流水</h2>
+              <div class="filters">
+                <select id="batchFilter">
+                  <option value="">全部批次</option>
+                </select>
+                <select id="statusFilter">
+                  <option value="">全部状态</option>
+                  <option value="draft">草稿</option>
+                  <option value="not_started">等待</option>
+                  <option value="running">生成中</option>
+                  <option value="finished">已完成</option>
+                  <option value="failed">失败</option>
+                  <option value="submit_failed">提交失败</option>
+                </select>
+                <select id="ownerFilter">
+                  <!-- 体验优化：任务流水筛选复用同一份使用人名单，保证统计口径一致。 -->
+                  <option value="">全部使用人</option>
+                </select>
+                <select id="jobDateFilter">
+                  <!-- 体验优化：多人使用后任务会变长，按日期筛选能更快找到当天任务。 -->
+                  <option value="">全部日期</option>
+                </select>
+                <input id="searchInput" placeholder="搜索">
+              </div>
+            </div>
+            <div class="bulk-actions">
+              <label class="select-all-row">
+                <input id="selectAllJobs" type="checkbox">
+                选择当前任务
+              </label>
+              <button id="syncAllBtn" type="button">同步全部</button>
+              <button id="bulkRefreshBtn" class="secondary" type="button" disabled>刷新选中</button>
+              <button id="bulkSaveBtn" class="secondary" type="button" disabled>保存选中</button>
+              <button id="selectFinishedBtn" class="secondary" type="button">选择可保存</button>
+              <button id="retryFailedBtn" class="secondary" type="button">重试失败</button>
+              <button id="bulkDeleteBtn" class="danger" type="button" disabled>批量删除</button>
+              <button id="exportCsvBtn" class="secondary" type="button">导出表格</button>
+              <label class="mine-toggle">
+                <input id="mineOnlyToggle" type="checkbox">
+                只看我的
+              </label>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>提示词</th>
+                    <th>模型</th>
+                    <th>状态</th>
+                    <th>用量</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="jobsTable"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel stats-panel">
+            <div class="panel-head">
+              <h2>统计</h2>
+            </div>
+            <div class="stats-grid">
+              <div>
+                <h3>按提示词</h3>
+                <div id="byScript" class="mini-table"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside id="library" class="panel library-panel">
+          <div class="panel-head">
+            <h2>提示词库</h2>
+            <span id="scriptCount">0 条</span>
+          </div>
+          <!-- 提示词库优化：增加搜索和分类筛选，避免提示词数量多时只能上下翻。 -->
+          <div class="library-tools">
+            <input id="scriptSearchInput" placeholder="搜索提示词">
+            <select id="scriptCategoryFilter">
+              <option value="">全部分类</option>
+            </select>
+          </div>
+          <div class="script-list" id="scriptList"></div>
+        </aside>
+      </section>
+    </main>
+
+    <div id="confirmModal" class="video-modal" hidden>
+      <div class="video-modal-backdrop" data-close-confirm></div>
+      <section class="video-modal-panel confirm-modal-panel" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+        <header class="video-modal-head">
+          <div>
+            <h2 id="confirmTitle">确认操作</h2>
+            <p id="confirmMeta"></p>
+          </div>
+          <button id="cancelConfirmBtn" class="secondary" type="button">取消</button>
+        </header>
+        <div id="confirmBody" class="detail-grid"></div>
+        <div class="video-preview-actions">
+          <button id="confirmActionBtn" class="danger" type="button">确认</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="jobDetailModal" class="video-modal" hidden>
+      <div class="video-modal-backdrop" data-close-detail></div>
+      <section class="video-modal-panel detail-modal-panel" role="dialog" aria-modal="true" aria-labelledby="jobDetailTitle">
+        <header class="video-modal-head">
+          <div>
+            <h2 id="jobDetailTitle">任务详情</h2>
+            <p id="jobDetailMeta"></p>
+          </div>
+          <button id="closeDetailBtn" class="secondary" type="button">关闭</button>
+        </header>
+        <div id="jobDetailBody" class="detail-grid"></div>
+        <div class="video-preview-actions">
+          <button id="copyDetailBtn" class="secondary" type="button">复制任务信息</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="keyModal" class="video-modal" hidden>
+      <div class="video-modal-backdrop" data-close-key></div>
+      <section class="video-modal-panel key-modal-panel" role="dialog" aria-modal="true" aria-labelledby="keyModalTitle">
+        <header class="video-modal-head">
+          <div>
+            <h2 id="keyModalTitle">密钥设置</h2>
+              <p id="keyModalMeta">管理员专用。保存后会立即更新当前接口，不需要重启服务。</p>
+          </div>
+          <button id="closeKeyModalBtn" class="secondary" type="button">关闭</button>
+        </header>
+        <div class="key-modal-grid">
+          <form id="keyForm" class="key-box">
+            <div>
+              <h3>Sora 2 / PoYo Key</h3>
+              <p id="poyoKeyState">读取中</p>
+            </div>
+            <input name="key" type="password" autocomplete="off" placeholder="粘贴 PoYo API Key">
+            <button class="secondary" type="submit">保存并更新 PoYo</button>
+          </form>
+          <form id="arkKeyForm" class="key-box">
+            <div>
+              <h3>Seedance 2.0 / 火山方舟 ARK Key</h3>
+              <p id="arkKeyState">读取中</p>
+            </div>
+            <input name="key" type="password" autocomplete="off" placeholder="粘贴 ARK_API_KEY">
+            <button class="secondary" type="submit">保存并更新火山</button>
+          </form>
+          <form id="volcAkSkForm" class="key-box">
+            <div>
+              <h3>火山企业 AK/SK（临时）</h3>
+              <p>只保存到本机，不会显示在页面上。</p>
+            </div>
+            <input name="accessKeyId" type="password" autocomplete="off" placeholder="粘贴 Access Key ID">
+            <input name="secretAccessKey" type="password" autocomplete="off" placeholder="粘贴 Secret Access Key">
+            <button class="secondary" type="submit">保存并更新 AK/SK</button>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <div id="videoPreviewModal" class="video-modal" hidden>
+      <div class="video-modal-backdrop" data-close-preview></div>
+      <section class="video-modal-panel" role="dialog" aria-modal="true" aria-labelledby="videoPreviewTitle">
+        <header class="video-modal-head">
+          <div>
+            <h2 id="videoPreviewTitle">视频预览</h2>
+            <p id="videoPreviewMeta"></p>
+          </div>
+          <button id="closePreviewBtn" class="secondary" type="button">关闭</button>
+        </header>
+        <video id="videoPreviewPlayer" controls playsinline preload="metadata"></video>
+        <div class="video-preview-actions">
+          <a id="videoPreviewOpen" class="link-button" href="#" target="_blank" rel="noreferrer">打开源视频</a>
+          <button id="videoPreviewSave" class="secondary" type="button">保存到本地</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js?v=20260522-usage-units"></script>
+  </body>
+</html>
