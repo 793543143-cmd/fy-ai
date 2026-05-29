@@ -9,6 +9,7 @@ const __dirname = path.dirname(__filename);
 const BASE_URL = "https://api.poyo.ai";
 const ARK_BASE_URL = "https://ark.cn-beijing.volces.com";
 const DEFAULT_OWNERS = ["朱浩权", "胡敏", "曾帆"];
+const IS_SERVERLESS = envFlag(process.env.NETLIFY) || envFlag(process.env.AWS_LAMBDA_FUNCTION_NAME) || envFlag(process.env.BOLT_RUNTIME);
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -81,8 +82,8 @@ await loadLocalEnv();
 const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || "0.0.0.0";
 const APP_ENV = process.env.APP_ENV || process.env.NODE_ENV || "development";
-const DATA_ROOT = resolveAppPath(process.env.FYAI_DATA_DIR || "data");
-const OUTPUT_ROOT = resolveAppPath(process.env.FYAI_OUTPUT_DIR || "outputs");
+const DATA_ROOT = resolveAppPath(process.env.FYAI_DATA_DIR || (IS_SERVERLESS ? "/tmp/fyai-data" : "data"));
+const OUTPUT_ROOT = resolveAppPath(process.env.FYAI_OUTPUT_DIR || (IS_SERVERLESS ? "/tmp/fyai-outputs" : "outputs"));
 const STORE_PATH = path.join(DATA_ROOT, "store.json");
 const OUTPUT_DIR = OUTPUT_ROOT;
 const ALLOW_LOCAL_ADMIN_BYPASS = envFlag(process.env.FYAI_ALLOW_LOCAL_ADMIN, APP_ENV !== "production");
@@ -1695,7 +1696,7 @@ async function serveStatic(res, url) {
   }
 }
 
-const server = http.createServer(async (req, res) => {
+export async function handleNodeRequest(req, res, rawUrl = null) {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   try {
     if (url.pathname.startsWith("/api/")) {
@@ -1705,8 +1706,16 @@ const server = http.createServer(async (req, res) => {
   } catch (error) {
     return jsonResponse(res, error.status || 500, { error: error.message || "Server error" });
   }
-});
+}
 
-server.listen(PORT, HOST, () => {
-  console.log(`PoYo Sora workflow running at http://${HOST}:${PORT}`);
-});
+const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === __filename;
+
+if (isMainModule) {
+  const server = http.createServer(async (req, res) => {
+    await handleNodeRequest(req, res);
+  });
+
+  server.listen(PORT, HOST, () => {
+    console.log(`PoYo Sora workflow running at http://${HOST}:${PORT}`);
+  });
+}
