@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "echo 'No build step required'",
     "start": "node server.js"
   }
 }
